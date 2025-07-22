@@ -3,122 +3,266 @@ import json
 import random
 import os
 
-# --- Load Bible JSON ---
+# --- Custom CSS Styling (Light Mid Blue Background, Light Yellow Headings, Tool Title) ---
+st.markdown("""
+    <style>
+    body, .stApp {
+        background-color: #5b9bd5 !important; /* Light Mid Blue */
+        color: #fff !important;
+    }
+    .light-yellow-heading, h1, h2, h3 {
+        color: #FFF59D !important;  /* Light yellow for high-visibility highlighted text */
+        font-weight: bold !important;
+        font-family: 'Arial Black', Arial, sans-serif !important;
+    }
+    .bold-tool-title {
+        color: #fff !important;
+        font-size: 1.35em !important;
+        font-weight: bold !important;
+        letter-spacing: 0.01em;
+        margin: 0.8em 0 1.8em 0 !important;
+        padding-bottom: 0.2em;
+        font-family: 'Arial Black', Arial, sans-serif !important;
+        display: block;
+    }
+    .white-font {
+        color: #fff !important;
+        font-family: 'Arial', sans-serif !important;
+    }
+    .stRadio label, .st-selectbox label, .stExpanderHeader {
+        color: #fff !important;
+    }
+    /* Improved radio buttons */
+    div[role='radiogroup'] {
+        background: rgba(74, 134, 197,0.25) !important;
+        padding: 14px 10px 7px 10px !important;
+        border-radius: 12px !important;
+        margin-bottom: 1.3em;
+        margin-top: 0.5em;
+        box-shadow: 0 2px 12px #FFF59D33;
+    }
+    div[role='radiogroup'] label {
+        font-size: 1.22em !important;
+        font-weight: 800 !important;
+        color: #FFF9C4 !important;
+        border-radius: 7px !important;
+        background: #4a86c5 !important;  /* darker mid blue for radio background */
+        padding: 7px 18px !important;
+        margin-top: 7px !important;
+        margin-bottom: 6px !important;
+        margin-left: 0.7em;
+        margin-right: 0.7em;
+        transition: background 0.22s, color 0.22s;
+        box-shadow: 0 0 6px #FFF59D44;
+    }
+    div[role='radiogroup'] label:hover, div[role='radiogroup'] label:focus {
+        background: #FFF9C422 !important;
+        color: #222 !important;
+    }
+    table.match-following-table {
+        width: 80%% !important;
+        margin: 0.7em 0 1.1em 0 !important;
+        font-size: 1.1em;
+        border-collapse: separate;
+        border-spacing: 0 6px;
+    }
+    table.match-following-table td {
+        border: none !important;
+        padding: 0.35em 1.3em 0.35em 0.3em !important;
+        color: #fff !important;
+        background: #3f77bd !important;   /* slightly darker blue for contrast */
+        border-radius: 8px;
+        vertical-align: middle;
+        font-family: 'Arial', sans-serif !important;
+    }
+    table.match-following-table th {
+        color: #FFF59D !important;
+        background: transparent !important;
+        font-size: 1.13em !important;
+        text-align: left;
+        padding-bottom: 0.28em;
+        border: none !important;
+        font-weight: 900;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 @st.cache_data
 def load_bible(version_file):
     with open(version_file, 'r', encoding='utf-8-sig') as f:
         return json.load(f)
 
-# --- Get all book names from the Bible data ---
-def get_book_names(bible_data):
-    return [book['name'] for book in bible_data]
-
-# --- Get chapter count for a selected book ---
 def get_chapter_count(bible_data, book):
     for b in bible_data:
         if b['name'].lower() == book.lower():
             return len(b['chapters'])
     return 0
 
-# --- Get Verses from Book and Chapter ---
 def get_chapter_verses(bible_data, book, chapter):
     try:
         book_data = next(b for b in bible_data if b['name'].lower() == book.lower())
         return book_data['chapters'][int(chapter) - 1]
-    except Exception as e:
-        st.error(f"Error fetching chapter: {e}")
+    except Exception:
         return []
 
-# --- Generate Questions ---
-def generate_direct_questions(verses):
+def light_yellow_heading(text, level=2):
+    return f"<h{level} class='light-yellow-heading' style='margin-top:1.2em;margin-bottom:0.8em;'>{text}</h{level}>"
+
+def generate_direct_questions(verses, reference):
     questions = []
-    for _ in range(3):
-        verse = random.choice(verses)
+    filled = 0
+    randomized = verses.copy()
+    random.shuffle(randomized)
+    for verse in randomized:
         words = verse.split()
-        if len(words) > 5:
-            blanked = verse.replace(random.choice(words), "____", 1)
-            questions.append(f"🦠 Fill in the blank: {blanked}")
-        else:
-            questions.append(f"🦠 True or False: {verse}")
+        if len(words) > 5 and filled < 2:
+            blank = random.choice(words)
+            blanked = verse.replace(blank, "____", 1)
+            questions.append({
+                "heading": "Fill in the blank",
+                "text": blanked,
+                "reference": f"({reference})"
+            })
+            filled += 1
+        if filled == 2: break
+    for verse in randomized:
+        if len(questions) >= 2: break
+        questions.append({
+            "heading": "True or False",
+            "text": verse,
+            "reference": f"({reference})"
+        })
+    questions.append({
+        "heading": "Match the Following",
+        "is_table": True,
+        "reference": "",
+        "table_data": [
+            ["Joab’s revenge", "A. Bitterness"],
+            ["David’s mourning", "B. Honour"],
+            ["Abner’s promise", "C. Diplomacy"],
+        ]
+    })
     return questions
 
-def generate_meditative_questions(verses):
+def generate_meditative_questions(verses, reference):
+    templates = [
+        ("Reflect", "Reflect on this: What does {summary} reveal about God's character?"),
+        ("Think Deeper", "Think deeper: How can {summary} guide your spiritual walk today?"),
+        ("Lesson", "What lesson does {summary} hold that aligns with {reference}?"),
+        ("Compare", "Compare {summary} with {reference}: What truth stands out?"),
+    ]
+    refs = [
+        "Romans 12:19", "Philippians 4:6", "John 14:27",
+        "Isaiah 41:10", "Matthew 5:44", "Psalm 23:1", "Galatians 5:22"
+    ]
     questions = []
-    for _ in range(4):
+    for heading, template in templates:
         verse = random.choice(verses)
         summary = verse[:80] + ("..." if len(verse) > 80 else "")
-        linked_verse = "Romans 12:19"
-        q = random.choice([
-            f"Reflect on this: What does {summary} reveal about God's character?",
-            f"Think deeper: How can {summary} guide your spiritual walk today?",
-            f"What lesson does {summary} hold that aligns with {linked_verse}?",
-            f"Compare {summary} with {linked_verse}: What truth stands out?"
-        ])
-        questions.append("🧬🦠 " + q)
+        ref = random.choice(refs)
+        text = template.format(summary=summary, reference=ref)
+        questions.append({
+            "heading": heading,
+            "text": text,
+            "reference": f"({ref})"
+        })
     return questions
 
-# --- Streamlit UI ---
-st.title("📖 Today's Hope - Meditative Bible Quiz")
+# --- UI Rendering ---
 
-# Find all .json files in the current directory for Bible versions
+st.markdown(
+    "<div class='bold-tool-title' style='text-align:center;'>Bible Meditative Tool</div>",
+    unsafe_allow_html=True
+)
+
 bible_versions = [f for f in os.listdir() if f.endswith('.json')]
-version = st.selectbox("Select Bible Version:", bible_versions)
+version = st.selectbox("**Select Bible Version:**", bible_versions)
 
-# Load Bible data
 bible_data = load_bible(version)
 
-# Testament Filter
-old_testament_books = [b['name'] for b in bible_data if b['name'] in [
+old_testament_books = [
     "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua",
     "Judges", "Ruth", "1 Samuel", "2 Samuel", "1 Kings", "2 Kings",
     "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther", "Job",
     "Psalms", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah",
     "Jeremiah", "Lamentations", "Ezekiel", "Daniel", "Hosea", "Joel", "Amos",
     "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai",
-    "Zechariah", "Malachi"]]
+    "Zechariah", "Malachi"
+]
+old_testament = [b['name'] for b in bible_data if b['name'] in old_testament_books]
+new_testament = [b['name'] for b in bible_data if b['name'] not in old_testament_books]
 
-new_testament_books = [b['name'] for b in bible_data if b['name'] not in old_testament_books]
-
-selected_testament = st.radio("Choose Testament:", ["Old Testament", "New Testament"])
+selected_testament = st.radio("**Choose Testament:**", ["Old Testament", "New Testament"])
 
 if selected_testament == "Old Testament":
-    filtered_books = old_testament_books
+    filtered_books = old_testament
 else:
-    filtered_books = new_testament_books
+    filtered_books = new_testament
 
-# Book and Chapter Dropdowns
-book = st.selectbox("Select Book:", filtered_books)
+book = st.selectbox("**Select Book:**", filtered_books)
 chapter_count = get_chapter_count(bible_data, book)
-chapter = st.selectbox("Select Chapter:", list(map(str, range(1, chapter_count + 1))))
+chapter = st.selectbox("**Select Chapter:**", [str(c) for c in range(1, chapter_count+1)])
 
-# --- Background summaries dictionary ---
-background_info = {
-    "Matthew": "Matthew was written by the apostle Matthew, a former tax collector and one of Jesus’ twelve disciples. This gospel emphasizes Jesus as the promised Messiah and King. Matthew 1 opens with a genealogy tracing Jesus' lineage from Abraham through David, affirming His rightful place in Jewish history. It underscores the fulfillment of Old Testament prophecy and introduces the miraculous virgin birth, showing that Jesus is both human and divine.",
+with st.expander("📘 Introduction & Background Study", expanded=True):
+    st.markdown(
+        "<span class='white-font'><b>This is a brief background of "
+        f"{book} {chapter}. Who wrote it, the purpose, and key message.</b></span>",
+        unsafe_allow_html=True,
+    )
 
-    "John": "The Gospel of John was authored by the apostle John, known as the disciple whom Jesus loved. Written to reveal Jesus as the Son of God, John presents deep theological truths. The first chapter of John begins with the famous prologue — 'In the beginning was the Word' — introducing Jesus as the eternal Logos, the divine Word made flesh, highlighting both His deity and His role in creation.",
+verses = get_chapter_verses(bible_data, book, chapter)
 
-    "Genesis": "Genesis, traditionally attributed to Moses, serves as the foundational book of the Bible. Chapter 1 details the majestic creation account — how God formed the heavens, the earth, light, and life itself in six days. This chapter sets the stage for understanding God's power, order, and intentionality in creation, while also introducing the concept of humanity being made in God’s image.",
-
-    "Luke": "Luke was written by Luke the physician and companion of Paul. It provides a detailed historical account of Jesus’ life, emphasizing His compassion and ministry to outcasts. Chapter 1 describes the angelic announcement of John the Baptist’s birth and then Jesus' birth, highlighting the divine orchestration and fulfillment of prophecy in God's salvation plan."
-}
-
-# Show background and full chapter sections
-with st.expander("\U0001f4d8 Introduction & Background Study"):
-    summary = background_info.get(book, f"Background info for {book} is not yet available.")
-    st.markdown(summary)
-
-with st.expander("\U0001f4d6 Read This Chapter"):
-    verses = get_chapter_verses(bible_data, book, chapter)
+with st.expander("📖 Read This Chapter"):
     for i, v in enumerate(verses, 1):
-        st.markdown(f"{i}. {v}")
+        st.markdown(f"<span class='white-font'><b>{i}.</b> {v}</span>", unsafe_allow_html=True)
 
-# Quiz Generator Button
+st.markdown("<hr>", unsafe_allow_html=True)
+
 if st.button("Generate Quiz"):
+    st.markdown(
+        light_yellow_heading("Quiz Questions", 2),
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        "<div style='color:#fff;font-size:1.13em;font-weight:bold;margin-bottom:1.2em;'>Today's Hope Meditative Bible Quiz</div>",
+        unsafe_allow_html=True
+    )
     if verses:
-        st.markdown("## 🧪 Quiz Questions")
-        for q in generate_direct_questions(verses):
-            st.markdown(q)
-        for q in generate_meditative_questions(verses):
-            st.markdown(q)
+        ref = f"{book} {chapter}"
+        all_questions = generate_direct_questions(verses, ref) + generate_meditative_questions(verses, ref)
+        for idx, q in enumerate(all_questions, 1):
+            if q.get("is_table"):
+                st.markdown(
+                    f"""<div style='margin-bottom:1.5em;'>
+                        <span class='white-font'><b>{idx}.</b></span><br>
+                        <span class='light-yellow-heading' style='font-size:1.08em;margin-bottom:2px'>{q['heading']}</span>
+                        <table class="match-following-table">
+                        <tr>
+                            <th>A (Person/Act)</th>
+                            <th>B (Spiritual Theme)</th>
+                        </tr>
+                        <tr>
+                            <td>Joab’s revenge</td>
+                            <td>A. Bitterness</td>
+                        </tr>
+                        <tr>
+                            <td>David’s mourning</td>
+                            <td>B. Honour</td>
+                        </tr>
+                        <tr>
+                            <td>Abner’s promise</td>
+                            <td>C. Diplomacy</td>
+                        </tr>
+                        </table>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f"""<div style='margin-bottom:1.6em;'>
+                    <span class='white-font'><b>{idx}.</b></span><br>
+                    <span class='light-yellow-heading' style='font-size:1.08em;margin-bottom:2px'>{q['heading']}</span><br>
+                    <span class='white-font'>{q['text']} <i>{q['reference']}</i></span>
+                    </div>
+                    """, unsafe_allow_html=True)
     else:
         st.warning("No verses found for that book/chapter.")
